@@ -1,0 +1,46 @@
+-- reacteur
+local modemSide = "right"
+local adapterSide = "back"
+
+peripheral.find("modem", rednet.open)
+local reactor = peripheral.wrap(adapterSide)
+
+-- Settings
+local TEMP_THRESHOLD = 100 -- Kelvin
+local WASTE_THRESHOLD = 1e6    -- 1,000,000 mB
+
+-- Send status every 2 seconds
+parallel.waitForAny(
+    function()
+        while true do
+            local ok, data = pcall(function()
+                return {
+                    status     = reactor.getStatus(),
+                    temp       = reactor.getTemperature(),
+                    damage     = reactor.getDamagePercent(),
+                    waste      = reactor.getWaste().amount,
+                    burnSet    = reactor.getBurnRate(),
+                    burnActual = reactor.getActualBurnRate()
+                }
+            end)
+            if ok and data then
+                -- Auto-SCRAM if above threshold
+                if data.temp > TEMP_THRESHOLD or data.waste > WASTE_THRESHOLD then
+                    reactor.scram()
+                end
+                rednet.broadcast(data, "reactor_status")
+            end
+            sleep(2)
+        end
+    end,
+    function()
+        while true do
+            local senderId, message, protocol = rednet.receive("reactor_command")
+            if message == "start" then
+                reactor.activate()
+            elseif message == "scram" then
+                reactor.scram()
+            end
+        end
+    end
+)

@@ -1,0 +1,120 @@
+-- ui_node.lua
+local modemSide = "left"
+local monitorSide = "right"
+
+-- Setup
+peripheral.find("modem", rednet.open)
+local monitor = peripheral.wrap(monitorSide)
+local cc_strings = require("cc.strings")
+
+monitor.setTextScale(1)
+monitor.setBackgroundColor(colors.black)
+monitor.setTextColor(colors.white)
+monitor.clear()
+
+-- Draw a button
+local function drawButton(label, x, y, w, h, bgColor)
+    monitor.setBackgroundColor(bgColor)
+    for i = 0, h - 1 do
+        monitor.setCursorPos(x, y + i)
+        monitor.write(string.rep(" ", w))
+    end
+    monitor.setCursorPos(x + math.floor((w - #label) / 2), y + math.floor(h / 2))
+    monitor.setTextColor(colors.white)
+    monitor.write(label)
+    monitor.setBackgroundColor(colors.black)
+end
+
+-- Safe string formatting
+local function safeFormat(fmt, ...)
+    local success, result = pcall(string.format, fmt, ...)
+    return success and result or "Erreur de formatage"
+end
+
+-- Display combined system state
+local function display(systemState)
+    monitor.clear()
+    local width, height = monitor.getSize()
+    local cursorY = 1
+    local wrapWidth = width - 2
+
+    -- Determine reactor state and color
+    local reactorActive = systemState.reactor.status
+    local stateText = reactorActive and "Actif" or "Inactif"
+    local stateColor = reactorActive and colors.green or colors.red
+
+    monitor.setCursorPos(2, cursorY)
+    monitor.write("Etat du reacteur : ")
+    monitor.setTextColor(stateColor)
+    monitor.write(stateText)
+    monitor.setTextColor(colors.white)
+    cursorY = cursorY + 1
+
+    local infoLines = {
+        safeFormat("Temperature : %.2f C", (systemState.reactor.temp or 0) - 273.15),
+        "Dommages : " .. (systemState.reactor.damage or 0) .. " %",
+        safeFormat("Debit de combustion max : %.2f mB/t", systemState.reactor.burnSet or 0),
+        safeFormat("Debit de combustion reel : %.2f mB/t", systemState.reactor.burnActual or 0),
+        safeFormat("Production : %.2f MJ/t", systemState.turbine.production or 0)
+    }
+
+    for _, line in ipairs(infoLines) do
+        local wrapped = cc_strings.wrap(line, wrapWidth)
+        for _, wline in ipairs(wrapped) do
+            if cursorY > height then break end
+            monitor.setCursorPos(2, cursorY)
+            monitor.write(wline)
+            cursorY = cursorY + 1
+        end
+    end
+
+    -- Draw buttons
+    local buttonWidth = math.floor(width * 0.3)
+    local buttonHeight = 3
+    local buttonStartX = math.floor((width - buttonWidth * 2 - 4) / 2) + 1
+    local buttonY = cursorY + 1
+
+    drawButton("Demarrer", buttonStartX, buttonY, buttonWidth, buttonHeight, colors.green)
+    drawButton("STOP", buttonStartX + buttonWidth + 4, buttonY, buttonWidth, buttonHeight, colors.red)
+
+    return {
+        start = { x1 = buttonStartX, y1 = buttonY, x2 = buttonStartX + buttonWidth - 1, y2 = buttonY + buttonHeight - 1 },
+        stop = { x1 = buttonStartX + buttonWidth + 4, y1 = buttonY, x2 = buttonStartX + buttonWidth * 2 + 3, y2 = buttonY + buttonHeight - 1 }
+    }
+end
+
+-- System state (reactor + turbine)
+local state = {
+    reactor = {},
+    turbine = {}
+}
+
+local buttonBounds = nil
+
+-- Event listeners
+parallel.waitForAny(
+    function() -- Unified status listener
+        while true do
+            local _, data, protocol = rednet.receive()
+            if type(data) == "table" and type(protocol) == "string" and protocol:match("_status$") then -- meaning all frequencies that end with "_status" will be listenned to, maybe use something more specific in the future
+                local key = protocol:match("^(.-)_status")
+                if key then
+                    state[key] = data
+                    buttonBounds = display(state)
+                end
+            end
+        end
+    end,
+    function() -- Monitor button interaction
+        while true do
+            local _, _, touchX, touchY = os.pullEvent("monitor_touch")
+            if buttonBounds then
+                if touchX >= buttonBounds.start.x1 and touchX <= buttonBounds.start.x2 and touchY >= buttonBounds.start.y1 and touchY <= buttonBounds.start.y2 then
+                    rednet.broadcast("start", "reactor_command")
+                elseif touchX >= buttonBounds.stop.x1 and touchX <= buttonBounds.stop.x2 and touchY >= buttonBounds.stop.y1 and touchY <= buttonBounds.stop.y2 then
+                    rednet.broadcast("scram", "reactor_command")
+                end
+            end
+        end
+    end
+)
