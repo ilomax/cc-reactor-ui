@@ -51,7 +51,7 @@ local function display(systemState)
     cursorY = cursorY + 1
 
     local infoLines = {
-        safeFormat("Temperature : %.2f C", (systemState.reactor.temp - 273.15) or 0),
+        safeFormat("Temperature : %.2f C", systemState.reactor.temp or 0),
         "Dommages : " .. (systemState.reactor.damage or 0) .. " %",
         safeFormat("Debit de combustion max : %.2f mB/t", systemState.reactor.burnSet or 0),
         safeFormat("Debit de combustion reel : %.2f mB/t", systemState.reactor.burnActual or 0),

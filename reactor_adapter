@@ -1,22 +1,20 @@
--- reacteur
 local modemSide = "right"
-local adapterSide = "back"
+local reactorSide = "back"
 
 peripheral.find("modem", rednet.open)
-local reactor = peripheral.wrap(adapterSide)
+local reactor = peripheral.wrap(reactorSide)
 
 -- Settings
 local TEMP_THRESHOLD = 100 -- Kelvin
 local WASTE_THRESHOLD = 1e6    -- 1,000,000 mB
 
--- Send status every 2 seconds
 parallel.waitForAny(
     function()
         while true do
             local ok, data = pcall(function()
                 return {
                     status     = reactor.getStatus(),
-                    temp       = reactor.getTemperature(),
+                    temp       = reactor.getTemperature() - 273.15, --conversion K -> C
                     damage     = reactor.getDamagePercent(),
                     waste      = reactor.getWaste().amount,
                     burnSet    = reactor.getBurnRate(),
@@ -30,10 +28,10 @@ parallel.waitForAny(
                 end
                 rednet.broadcast(data, "reactor_status")
             end
-            sleep(2)
+            sleep(2) -- 2sec delay
         end
     end,
-    function()
+    function() -- buttons handler
         while true do
             local senderId, message, protocol = rednet.receive("reactor_command")
             if message == "start" then

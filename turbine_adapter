@@ -1,26 +1,26 @@
--- Turbine transmitter
 local modemSide = "right"
 local turbineSide = "back"
 
--- Open modem for rednet
 rednet.open(modemSide)
-
--- Wrap the turbine peripheral
 local turbine = peripheral.wrap(turbineSide)
 
--- Check connection
 if not turbine then
     print("Turbine not found on side: " .. turbineSide)
     return
 end
 
-while true do
-    local production = turbine.getProductionRate() / 1e6
-
-    local data = {
-        production = production
-    }
-
-    rednet.broadcast(data, "turbine_status")
-    sleep(1)
-end
+parallel.waitForAny(
+    function()
+        while true do
+            local ok, data = pcall(function()
+                return {
+                    production = turbine.getProductionRate() / 1e6
+                }
+            end)
+            if ok and data then
+                rednet.broadcast(data, "turbine_status")
+            end
+            sleep(2) -- 2sec delay
+        end
+    end
+)
