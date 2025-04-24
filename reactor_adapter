@@ -5,7 +5,7 @@ peripheral.find("modem", rednet.open)
 local reactor = peripheral.wrap(reactorSide)
 
 -- Settings
-local TEMP_THRESHOLD = 100 -- Kelvin
+local TEMP_THRESHOLD = 1000 -- Kelvin
 local WASTE_THRESHOLD = 1e6    -- 1,000,000 mB
 
 parallel.waitForAny(
